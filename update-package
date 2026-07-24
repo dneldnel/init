@@ -19,7 +19,6 @@ DEFAULT_PACKAGES=(
   "@google/gemini-cli"
   "@openai/codex"
   "@anthropic-ai/claude-code"
-  "@fission-ai/openspec"
   "opencode-ai"
 )
 
