@@ -23,7 +23,8 @@ line() {
 }
 
 fetch_direct() {
-  curl -fsSL --max-time "$TIMEOUT" --noproxy '*' "$DOMESTIC_URL"
+  # -4：强制 IPv4 连接，否则双栈网络下会返回 IPv6 地址
+  curl -4 -fsSL --max-time "$TIMEOUT" --noproxy '*' "$DOMESTIC_URL"
 }
 
 fetch_proxy() {
