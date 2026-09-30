@@ -4,7 +4,7 @@
 #   - @google/gemini-cli
 #   - @openai/codex
 #   - @anthropic-ai/claude-code
-#   - opencode-ai
+#   - opencode-ai（固定 tui-v2 渠道）
 # 功能：
 #   - 自动检测当前 vs 最新版本
 #   - 若版本一致则跳过更新
@@ -59,7 +59,7 @@ if [[ -n "$PREFIX" ]]; then
 fi
 
 # ------------------ 函数定义 ------------------
-npm_version() { npm view "$1" version 2>/dev/null || echo ""; }
+npm_version() { npm view "$1" version; }
 
 installed_version() {
   local name="$1"
@@ -92,12 +92,17 @@ cli_name_guess() {
 
 update_pkg() {
   local pkg="$1"
-  local current latest
+  local current latest tag=latest
+  [[ "$pkg" == "opencode-ai" ]] && tag=tui-v2
   current="$(installed_version "$pkg" || true)"
-  latest="$(npm_version "$pkg" || true)"
+  latest="$(npm_version "${pkg}@${tag}")" || {
+    echo "版本查询失败：package=$pkg tag=$tag" >&2
+    return 1
+  }
+  [[ -n "$latest" ]] || { echo "版本查询结果为空：package=$pkg tag=$tag" >&2; return 1; }
 
   echo "————————————————————————————————————————————————"
-  echo "▶ 包：$pkg"
+  echo "▶ 包：${pkg}（渠道：${tag}）"
   [[ -n "$current" ]] && echo "  - 当前：$current" || echo "  - 当前：未安装"
   [[ -n "$latest"  ]] && echo "  - 最新：$latest"
 
@@ -121,11 +126,11 @@ update_pkg() {
     return 0
   fi
 
-  echo "  - 正在更新 → latest..."
-  if ${SUDO_CMD:-} npm install -g "${pkg}@latest"; then
+  echo "  - 正在更新 → $tag..."
+  if ${SUDO_CMD:-} npm install -g "${pkg}@${tag}"; then
     :
   else
-    echo "⚠️ 更新失败。若为权限问题，请尝试：sudo npm install -g \"${pkg}@latest\""
+    echo "更新失败：package=$pkg tag=$tag prefix=$PREFIX" >&2
     return 1
   fi
 
@@ -137,7 +142,7 @@ update_pkg() {
   bin="$(cli_name_guess "$pkg")"
   if [[ -n "$bin" ]] && command -v "$bin" >/dev/null 2>&1; then
     echo -n "  - CLI 版本："
-    "$bin" --version || true
+    "$bin" --version || { echo "CLI 校验失败：package=$pkg command=$bin" >&2; return 1; }
   fi
 }
 
@@ -150,20 +155,13 @@ echo "包列表：${PKGS[*]}"
 echo "模式：$MODE"
 echo "————————————————————————————————————————————————"
 
-fail=0
 for p in "${PKGS[@]}"; do
-  if ! update_pkg "$p"; then
-    fail=$((fail+1))
-  fi
+  update_pkg "$p" || exit 1
 done
 
 echo "————————————————————————————————————————————————"
 if [[ "$MODE" == "check" ]]; then
   echo "🔍 检查完成"
 else
-  if [[ $fail -eq 0 ]]; then
-    echo "✅ 全部更新完成"
-  else
-    echo "⚠️ 有 $fail 个包更新失败，请查看上方提示"
-  fi
+  echo "✅ 全部更新完成"
 fi
