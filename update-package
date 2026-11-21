@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# macOS: Globally update or check LLM-related npm CLIs
+# macOS: Globally update or check LLM-related CLIs
 # 包含：
-#   - @google/gemini-cli
+#   - antigravity (agy)
 #   - @openai/codex
 #   - @anthropic-ai/claude-code
-#   - opencode-ai（固定 tui-v2 渠道）
+#   - @opencode/cli
 # 功能：
-#   - 自动检测当前 vs 最新版本
-#   - 若版本一致则跳过更新
+#   - npm 包比较当前与最新版，版本一致则跳过
+#   - Antigravity 使用官方安装器和 agy update，检查模式只显示当前版本
 #   - 支持 --check 模式（仅检查不安装）
 #   - 自动判断是否需 sudo
 #   - 支持 PACKAGES / NPM_REGISTRY 环境变量覆盖
@@ -16,10 +16,10 @@ set -euo pipefail
 
 # ------------------ 默认包列表 ------------------
 DEFAULT_PACKAGES=(
-  "@google/gemini-cli"
+  "antigravity"
   "@openai/codex"
   "@anthropic-ai/claude-code"
-  "opencode-ai"
+  "@opencode/cli"
 )
 
 # ------------------ 参数解析 ------------------
@@ -82,18 +82,43 @@ installed_version() {
 
 cli_name_guess() {
   case "$1" in
-    "@google/gemini-cli") echo "gemini" ;;
     "@openai/codex") echo "codex" ;;
     "@anthropic-ai/claude-code") echo "claude-code" ;;
-    "opencode-ai") echo "opencode" ;;
+    "@opencode/cli") echo "opencode" ;;
     *) echo "" ;;
   esac
+}
+
+update_antigravity() {
+  local PATH="$HOME/.local/bin:$PATH"
+  echo "————————————————————————————————————————————————"
+  echo "▶ Antigravity CLI (agy)"
+
+  if [[ "$MODE" == "check" ]]; then
+    if ! command -v agy >/dev/null 2>&1; then
+      echo "  - 当前：未安装"
+      return 0
+    fi
+  elif command -v agy >/dev/null 2>&1; then
+    agy update || { echo "Antigravity 更新失败：agy update" >&2; return 1; }
+  else
+    need curl
+    curl -fsSL https://antigravity.google/cli/install.sh | bash || {
+      echo "Antigravity 安装失败：https://antigravity.google/cli/install.sh" >&2
+      return 1
+    }
+  fi
+
+  echo -n "  - 当前："
+  AGY_CLI_DISABLE_AUTO_UPDATE=true agy --version || {
+    echo "Antigravity 版本读取失败：agy --version" >&2
+    return 1
+  }
 }
 
 update_pkg() {
   local pkg="$1"
   local current latest tag=latest
-  [[ "$pkg" == "opencode-ai" ]] && tag=tui-v2
   current="$(installed_version "$pkg" || true)"
   latest="$(npm_version "${pkg}@${tag}")" || {
     echo "版本查询失败：package=$pkg tag=$tag" >&2
@@ -105,6 +130,19 @@ update_pkg() {
   echo "▶ 包：${pkg}（渠道：${tag}）"
   [[ -n "$current" ]] && echo "  - 当前：$current" || echo "  - 当前：未安装"
   [[ -n "$latest"  ]] && echo "  - 最新：$latest"
+
+  # 新旧 npm 包都提供 opencode，安装新包前先释放旧包占用的命令。
+  if [[ "$pkg" == "@opencode/cli" && -n "$PREFIX" && -d "$PREFIX/lib/node_modules/opencode-ai" ]]; then
+    if [[ "$MODE" == "check" ]]; then
+      echo "  - 旧包 opencode-ai：$(installed_version opencode-ai)（更新时迁移）"
+    else
+      echo "  - 正在卸载旧的 opencode-ai…"
+      ${SUDO_CMD:-} npm uninstall -g opencode-ai || {
+        echo "旧 OpenCode 卸载失败：package=opencode-ai prefix=$PREFIX" >&2
+        return 1
+      }
+    fi
+  fi
 
   # --- 仅检查模式 ---
   if [[ "$MODE" == "check" ]]; then
@@ -156,7 +194,11 @@ echo "模式：$MODE"
 echo "————————————————————————————————————————————————"
 
 for p in "${PKGS[@]}"; do
-  update_pkg "$p" || exit 1
+  case "$p" in
+    antigravity) update_antigravity || exit 1 ;;
+    opencode-ai) update_pkg "@opencode/cli" || exit 1 ;;
+    *) update_pkg "$p" || exit 1 ;;
+  esac
 done
 
 echo "————————————————————————————————————————————————"
