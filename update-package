@@ -3,7 +3,6 @@
 # 包含：
 #   - antigravity (agy)
 #   - @openai/codex
-#   - @anthropic-ai/claude-code
 #   - @opencode/cli
 # 功能：
 #   - npm 包比较当前与最新版，版本一致则跳过
@@ -16,9 +15,7 @@ set -euo pipefail
 
 # ------------------ 默认包列表 ------------------
 DEFAULT_PACKAGES=(
-  "antigravity"
   "@openai/codex"
-  "@anthropic-ai/claude-code"
   "@opencode/cli"
 )
 
@@ -83,7 +80,6 @@ installed_version() {
 cli_name_guess() {
   case "$1" in
     "@openai/codex") echo "codex" ;;
-    "@anthropic-ai/claude-code") echo "claude-code" ;;
     "@opencode/cli") echo "opencode" ;;
     *) echo "" ;;
   esac
